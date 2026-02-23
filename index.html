@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+  <title>RETRO WAVE · SPH CANNON DUEL (V2)</title>
+  <style>
+    * { box-sizing: border-box; }
+    html, body { margin:0; padding:0; width:100%; height:100%; overflow:hidden; background:#000; font-family:'Courier New', Courier, monospace; }
+
+    /* ===== Retro splash with ZX tape-loader border stripes (V2d) ===== */
+    :root{
+      --zx0:#000000;
+      --zx1:#0000d7; /* blue */
+      --zx2:#d70000; /* red */
+      --zx3:#d7d700; /* yellow */
+      --zx4:#00d700; /* green */
+      --zx5:#00d7d7; /* cyan */
+      --zx6:#d700d7; /* magenta */
+      --zx7:#d7d7d7; /* white-ish */
+    }
+
+    #splash-screen{
+      position:fixed; inset:0;
+      z-index:2000;
+      cursor:pointer;
+      user-select:none;
+      display:grid;
+      place-items:center;
+
+      /* big Spectrum-like border area */
+      padding:clamp(42px, 10vmin, 140px);
+
+      /* animated ZX stripes */
+      background:
+        repeating-linear-gradient(
+          0deg,
+          var(--zx2) 0px, var(--zx2) 6px,
+          var(--zx3) 6px, var(--zx3) 12px,
+          var(--zx4) 12px, var(--zx4) 18px,
+          var(--zx5) 18px, var(--zx5) 24px,
+          var(--zx1) 24px, var(--zx1) 30px,
+          var(--zx6) 30px, var(--zx6) 36px,
+          var(--zx7) 36px, var(--zx7) 42px,
+          var(--zx0) 42px, var(--zx0) 50px
+        );
+      background-size:100% 120px;
+      animation:zxBorder .22s linear infinite;
+      box-sizing:border-box;
+    }
+
+    @keyframes zxBorder{ 0%{background-position:0 0} 100%{background-position:0 120px} }
+
+    .splash-inner{
+      width:min(860px, 100%);
+      aspect-ratio: 4 / 3;
+      background:#000;
+      border:1px solid rgba(255,255,255,.25);
+      box-shadow:0 0 60px rgba(0,0,0,.55);
+      display:flex;
+      flex-direction:column;
+      justify-content:center;
+      align-items:center;
+      gap:18px;
+      padding:24px;
+    }
+
+    .brand{
+      font-size:clamp(26px, 5vw, 56px);
+      font-weight:900;
+      color:#ff0;
+      text-shadow:2px 2px 0 #f0f, 4px 4px 0 #0ff;
+      letter-spacing:6px;
+      animation:flicker 2s infinite;
+    }
+    @keyframes flicker{ 0%{opacity:1} 50%{opacity:.82} 100%{opacity:1} }
+
+    .loader-text{
+      font-size:clamp(16px, 3.6vw, 34px);
+      color:#00d700;
+      border-right:2px solid #00d700;
+      white-space:nowrap;
+      overflow:hidden;
+      padding-right:6px;
+      animation:blink-cursor 1s step-end infinite;
+    }
+    @keyframes blink-cursor{ from,to{border-color:transparent} 50%{border-color:#00d700} }
+
+    .tape-bars{
+      width:min(720px, 86%);
+      height:32px;
+      background:repeating-linear-gradient(90deg,#00d700 0px,#00d700 10px,#000 10px,#000 20px);
+      background-size:200% 100%;
+      animation:move-bars .5s linear infinite;
+      opacity:.78;
+      border:1px solid rgba(0,215,0,.35);
+      box-shadow:0 0 18px rgba(0,215,0,.15);
+    }
+    @keyframes move-bars{ 0%{background-position:0% 0%} 100%{background-position:200% 0%} }
+
+    .click-hint{
+      margin-top:10px;
+      font-size:clamp(12px, 2.6vw, 22px);
+      color:rgba(255,255,255,.35);
+      animation:pulse 1.5s infinite;
+    }
+    @keyframes pulse{ 0%{opacity:.25} 50%{opacity:1} 100%{opacity:.25} }
+
+    @media (prefers-reduced-motion: reduce){
+      #splash-screen{ animation:none; }
+      .tape-bars{ animation:none; }
+      .brand{ animation:none; }
+      .loader-text{ animation:none; }
+      .click-hint{ animation:none; }
+    }
+
+    /* main game */
+    #game-container{ position:fixed; inset:0; display:none; }
+    canvas{ display:block; width:100%; height:100%; background:#0a0620; }
+
+    /* HUD */
+    #hud{
+      position:absolute; left:12px; right:12px; top:10px; z-index:100;
+      display:flex; gap:10px; flex-wrap:wrap; align-items:center; justify-content:space-between;
+      pointer-events:none;
+    }
+    .hudBox{
+      pointer-events:auto;
+      display:flex; gap:10px; align-items:center;
+      background:rgba(10,6,30,.85);
+      border:1px solid rgba(255,43,214,.5);
+      border-radius:16px;
+      padding:10px 12px;
+      backdrop-filter:blur(4px);
+      color:#e9e6ff;
+      box-shadow:0 0 15px rgba(0,247,255,.3);
+    }
+    .hudLabel{ font-size:11px; text-transform:uppercase; opacity:.9; letter-spacing:1px; }
+    .mono{ font-variant-numeric:tabular-nums; font-weight:bold; }
+    .barWrap{ width:120px; height:12px; border-radius:999px; background:rgba(0,0,0,.5); overflow:hidden; border:1px solid rgba(255,255,255,.2); }
+    .bar{ height:100%; background:linear-gradient(90deg,#52ff8a,#ffe94a,#ff3b3b); transform-origin:left; width:100%; }
+
+    #mobile{
+      position:absolute; left:12px; right:12px; bottom:10px; z-index:100; display:none;
+      gap:10px; justify-content:space-between;
+    }
+    .mPad{
+      display:flex; gap:10px; background:rgba(10,6,30,.9);
+      border-radius:18px; padding:10px; backdrop-filter:blur(4px);
+      border:1px solid #ff2bd6;
+    }
+    .mBtn{
+      border-radius:16px; padding:12px 14px; font-weight:900;
+      background:linear-gradient(180deg,#fff,#ccc);
+      color:#07031a; touch-action:manipulation; border:none; font-size:14px; cursor:pointer;
+    }
+    .mBtn.neon{ background:linear-gradient(90deg,#ff2bd6,#00f7ff); color:#0a0420; }
+
+    .overlay{
+      position:absolute; inset:0; display:none; align-items:center; justify-content:center;
+      z-index:150; background:rgba(0,0,0,.85);
+    }
+    .card{
+      background:rgba(20,5,40,.95);
+      border-radius:24px;
+      padding:30px;
+      color:#e9e6ff;
+      border:2px solid #ff2bd6;
+      box-shadow:0 0 30px #00f7ff;
+      text-align:center;
+      max-width:min(680px, 92vw);
+    }
+    .card h2{ font-size:min(56px, 10vw); margin:0 0 20px; text-shadow:0 0 10px #ff2bd6; }
+    .card p{ font-size:min(26px, 5vw); margin:0 0 30px; }
+    .card button{
+      background:linear-gradient(90deg,#ff2bd6,#00f7ff);
+      border:none; border-radius:30px; padding:15px 40px;
+      font-size:24px; font-weight:bold; color:#0a0420; cursor:pointer;
+    }
+  </style>
+</head>
+<body>
+  <div id="splash-screen" role="button" aria-label="Retro Waves splash. Tap to start." tabindex="0">
+    <div class="splash-inner">
+      <div class="brand">RETRO WAVE</div>
+      <div class="loader-text" id="loading-text">LOADING...</div>
+      <div class="tape-bars" aria-hidden="true"></div>
+      <div class="click-hint">&gt; TAP / CLICK TO START TAPE &lt;</div>
+    </div>
+  </div>
+
+  <div id="game-container">
+    <canvas id="c"></canvas>
+
+    <div id="hud">
+      <div class="hudBox" style="gap:12px;">
+        <div>
+          <div class="hudLabel">YOU</div>
+          <div class="barWrap"><div id="hpYou" class="bar" style="width:100%"></div></div>
+        </div>
+        <div>
+          <div class="hudLabel">PC</div>
+          <div class="barWrap"><div id="hpPc" class="bar" style="width:100%"></div></div>
+        </div>
+      </div>
+
+      <div class="hudBox" style="gap: 15px;">
+        <span class="hudLabel">ANGLE</span><span class="hudVal mono" id="hudAngle">45°</span>
+        <span class="hudLabel">POWER</span><span class="hudVal mono" id="hudPower">85</span>
+        <span class="hudLabel">WIND</span><span class="hudVal mono" id="hudWind">+0.0</span>
+        <span class="hudLabel">TURN</span><span class="hudVal mono" id="hudTurn">YOU</span>
+      </div>
+    </div>
+
+    <div id="mobile">
+      <div class="mPad">
+        <button class="mBtn" data-act="angleUp" type="button">▲ ANGLE</button>
+        <button class="mBtn" data-act="angleDn" type="button">▼ ANGLE</button>
+      </div>
+      <div class="mPad">
+        <button class="mBtn" data-act="powerUp" type="button">⚡ POWER +</button>
+        <button class="mBtn" data-act="powerDn" type="button">⚡ POWER -</button>
+      </div>
+      <div class="mPad">
+        <button class="mBtn neon" data-act="fire" type="button">🔥 FIRE</button>
+      </div>
+    </div>
+
+    <div class="overlay" id="gameover">
+      <div class="card">
+        <h2 id="goTitle">Game Over</h2>
+        <p id="goSub"></p>
+        <button id="btnRestart" type="button">PLAY AGAIN</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="./sfx.js"></script>
+  <script src="./game.js"></script>
+</body>
+</html>
