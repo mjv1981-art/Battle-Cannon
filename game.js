@@ -20,15 +20,78 @@
     goTitle: document.getElementById('goTitle'),
     goSub: document.getElementById('goSub'),
     mobile: document.getElementById('mobile'),
-    btnRestart: document.getElementById('btnRestart')
+    btnRestart: document.getElementById('btnRestart'),
+    hudWeapon: document.getElementById('hudWeapon'),
+    hudMode: document.getElementById('hudMode'),
+    modeMenu: document.getElementById('modeMenu'),
+    modeTitle: document.getElementById('modeTitle'),
+    rotateLock: document.getElementById('rotate-lock')
   };
 
-  // --- constants (deformation requested) ---
-  // V2c changes:
-  // - Tanks are 50% smaller than V2b (sprite + hit geometry), while terrain keeps the same scale.
+  // --- constants / responsive scaling ---
+  // Baseline preferred by user: Xiaomi ultrawide 3440x1440 with V2f proportions.
+  const BASE_VIEW = { w: 3440, h: 1440, tankScale: 0.39 };
   const TANK_SCALE_REF = 0.78;
-  const TANK_SCALE = 0.39;                   // 50% of 0.78
-  const TANK_SF = TANK_SCALE / TANK_SCALE_REF; // = 0.5
+
+  function tankScale(){
+    const sx = world.W / BASE_VIEW.w;
+    const sy = world.H / BASE_VIEW.h;
+    const fit = Math.min(sx, sy);
+    return clamp(BASE_VIEW.tankScale * fit, 0.20, BASE_VIEW.tankScale);
+  }
+  function tankSF(){ return tankScale() / TANK_SCALE_REF; }
+  function tankHalfWidth(){ return CFG.tank.halfWidth * tankSF(); }
+  function tankBodyYOffset(){ return CFG.tank.bodyYOffset * tankSF(); }
+
+  const DIFFICULTIES = {
+    classic:   { name:'CLASSIC',   maxHp:100, blastScale:1.00, damageScale:1.00, windMax:22, pcTripleChance:0.18 },
+    hardcore:  { name:'HARDCORE',  maxHp:150, blastScale:0.82, damageScale:0.82, windMax:30, pcTripleChance:0.32 },
+    nightmare: { name:'NIGHTMARE', maxHp:200, blastScale:0.68, damageScale:0.70, windMax:40, pcTripleChance:0.46 }
+  };
+  let difficultyKey = 'classic';
+  function mode(){ return DIFFICULTIES[difficultyKey]; }
+
+  const WEAPONS = {
+    classic: { key:'classic', label:'CLASSIC', blastRadius:1.00, damageScale:1.00 },
+    triple:  { key:'triple',  label:'TRIPLE',  blastRadius:0.56, damageScale:0.45 }
+  };
+
+
+
+  function isMobileLike(){
+    const uaMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobile/i.test(navigator.userAgent || '');
+    const coarse = window.matchMedia && matchMedia('(pointer: coarse)').matches;
+    const touchCapable = ('ontouchstart' in window) || (navigator.maxTouchPoints || 0) > 0;
+    const vv = window.visualViewport;
+    const vw = vv ? vv.width : window.innerWidth;
+    const vh = vv ? vv.height : window.innerHeight;
+    const shortSide = Math.min(vw, vh);
+    const portrait = vh > vw;
+    return uaMobile || coarse || (touchCapable && shortSide <= 1280) || portrait;
+  }
+
+  function isPortraitLocked(){
+    const vv = window.visualViewport;
+    const vw = vv ? vv.width : window.innerWidth;
+    const vh = vv ? vv.height : window.innerHeight;
+    return isMobileLike() && vh > vw;
+  }
+
+  function updateOrientationLock(){
+    const locked = isPortraitLocked();
+    if (ui.rotateLock) {
+      ui.rotateLock.classList.toggle('show', locked);
+      ui.rotateLock.style.display = locked ? 'flex' : 'none';
+    }
+    document.body.style.overflow = locked ? 'hidden' : 'hidden';
+    if (locked) {
+      ui.mobile.style.display = 'none';
+    } else if (gameState === 'playing' || gameState === 'ending') {
+      if (window.innerWidth < 900 || isMobileLike()) ui.mobile.style.display = 'flex';
+      else ui.mobile.style.display = 'none';
+    }
+    return locked;
+  }
 
   const CFG = {
     gravity: 520,
@@ -130,7 +193,7 @@ function resizeCanvas(){
   }
 
   function newWind(){
-    world.wind = (Math.random()*2-1) * CFG.maxWind;
+    world.wind = (Math.random()*2-1) * mode().windMax;
   }
 
   // --- vehicles ---
@@ -142,12 +205,13 @@ function resizeCanvas(){
       facing: isPlayer ? 1 : -1,   // +1 => faces right, -1 => faces left (toward opponent)
       elev: 28,                    // barrel elevation in degrees (0..45)
       power: 85,
-      hp: 100,
+      hp: mode().maxHp,
       alive: true,
       isPlayer,
       color: isPlayer ? '#00f7ff' : '#ff2bd6',
       lastSupportY: null,         // for fall damage
-      width: CFG.tank.halfWidth*2
+      width: CFG.tank.halfWidth*2,
+      weapon: 'classic'
     };
   }
 
@@ -158,8 +222,8 @@ function resizeCanvas(){
     you.x = Math.max(150, world.W * 0.16);
     pc.x  = Math.min(world.W - 150, world.W * 0.84);
     // put them on ground; physics will settle
-    you.y = groundAt(you.x) - CFG.tank.bodyYOffset;
-    pc.y  = groundAt(pc.x)  - CFG.tank.bodyYOffset;
+    you.y = groundAt(you.x) - tankBodyYOffset();
+    pc.y  = groundAt(pc.x)  - tankBodyYOffset();
     you.vx = you.vy = 0;
     pc.vx = pc.vy = 0;
     you.lastSupportY = groundAt(you.x);
@@ -179,8 +243,8 @@ function resizeCanvas(){
   }
 
   // --- projectile / explosion ---
-  let projectile = null;
-  let explosion = null;
+  let projectiles = [];
+  let explosions = [];
   // V2c: final destruction blast (different from shell impact)
   let finale = null;
   let wreckPieces = [];
@@ -190,6 +254,10 @@ function resizeCanvas(){
 
   const preview = { points: [], maxSteps: 65, dt: 1/34 };
 
+  function getTargetTank(ownerTank){
+    return ownerTank.isPlayer ? pc : you;
+  }
+
   function spawnProjectile(ownerTank){
     const src = ownerTank;
     const angle = aimAngle(src);
@@ -198,28 +266,35 @@ function resizeCanvas(){
     const rad = angle * Math.PI/180;
     const speed = CFG.projectile.baseSpeed + power * CFG.projectile.speedPerPower;
 
-    // muzzle position (includes tilt + facing)
     const m = getGunMuzzleWorld(src);
-    const muzzleX = m.x;
-    const muzzleY = m.y;
-
-    // world direction combines tank tilt (body frame) with aim angle in world frame (aim is world-referenced)
-    // For retro feel, keep aim absolute (world angle), but muzzle starts on tilted body.
-    projectile = {
-      x: muzzleX,
-      y: muzzleY,
+    const base = {
+      x: m.x,
+      y: m.y,
       vx: Math.cos(rad) * speed,
       vy: -Math.sin(rad) * speed,
       radius: CFG.projectile.radius,
-      owner: ownerTank.isPlayer ? 'you' : 'pc'
+      owner: ownerTank.isPlayer ? 'you' : 'pc',
+      weapon: src.weapon || 'classic',
+      age: 0,
+      split: false
     };
+
+    if (base.weapon === 'triple') {
+      base.type = 'tripleCarrier';
+      base.splitDist = 150;
+      base.targetX = getTargetTank(src).x;
+    } else {
+      base.type = 'classic';
+    }
+
+    projectiles.push(base);
 
     if (window.SFX) window.SFX.cannon({ gain: 0.75 });
   }
 
   function computePreview(){
     preview.points = [];
-    if (gameState !== 'playing' || turn !== 'you' || projectile) return;
+    if (gameState !== 'playing' || turn !== 'you' || projectiles.length) return;
 
     const rad = aimAngle(you) * Math.PI/180;
     const speed = CFG.projectile.baseSpeed + you.power * CFG.projectile.speedPerPower;
@@ -241,41 +316,65 @@ function resizeCanvas(){
     }
   }
 
-  function impact(x,y){
-    explosion = { x, y, r: 0, t: 0, maxR: CFG.craterRadius };
+  function pushExplosion(x, y, maxR, palette='classic'){
+    explosions.push({ x, y, r: 0, t: 0, maxR, palette });
+  }
 
-    deformTerrain(x, y, CFG.craterRadius, CFG.deformStrength);
+  function maybeAdvanceTurn(owner){
+    if (projectiles.length || gameState !== 'playing') return;
+    if (turn === 'you'){
+      turn = 'pc';
+      resetAimForNextTurn(you);
+      newWind();
+      updateHUD();
+      computePreview();
+      setTimeout(pcTurn, 650);
+    } else {
+      turn = 'you';
+      resetAimForNextTurn(pc);
+      newWind();
+      updateHUD();
+      computePreview();
+    }
+  }
 
-    // explosion SFX
-    if (window.SFX) window.SFX.explosion({ gain: 0.85 });
+  function splitTripleProjectile(p){
+    pushExplosion(p.x, p.y, 24, 'split');
+    const spread = [-0.22, 0, 0.22];
+    const baseV = Math.hypot(p.vx, p.vy) * 0.88;
+    return spread.map(d => {
+      const ang = Math.atan2(p.vy, p.vx) + d;
+      return {
+        x: p.x,
+        y: p.y,
+        vx: Math.cos(ang) * baseV,
+        vy: Math.sin(ang) * baseV - 18,
+        radius: CFG.projectile.radius * 0.85,
+        owner: p.owner,
+        weapon: 'tripleChild',
+        type: 'tripleChild',
+        age: 0
+      };
+    });
+  }
 
-    // damage by proximity (bigger crater => bigger blast range)
-    applyBlastDamage(x,y, CFG.craterRadius);
+  function impact(proj, x, y){
+    const wcfg = proj.type === 'tripleChild' ? WEAPONS.triple : WEAPONS.classic;
+    const crater = CFG.craterRadius * wcfg.blastRadius * mode().blastScale;
+    const deform = CFG.deformStrength * wcfg.blastRadius;
 
-    // after deformation, tanks may fall/slide; physics will handle this
+    pushExplosion(x, y, crater, proj.type === 'tripleChild' ? 'triple' : 'classic');
+    deformTerrain(x, y, crater, deform);
+
+    if (window.SFX) window.SFX.explosion({ gain: proj.type === 'tripleChild' ? 0.62 : 0.85 });
+
+    applyBlastDamage(x, y, crater, wcfg.damageScale);
+
     updateHUD();
 
     if (you.hp <= 0) { startFinale(you, 'pc'); return; }
     if (pc.hp  <= 0) { startFinale(pc,  'you'); return; }
-    {
-      // switch turn
-      if (turn === 'you'){
-        turn = 'pc';
-        // reset YOU aim for next time YOU gets control (requirement).
-        resetAimForNextTurn(you);
-        newWind();
-        updateHUD();
-        computePreview(); // will be empty since not your turn
-        setTimeout(pcTurn, 650);
-      } else {
-        turn = 'you';
-        // reset PC aim for next time PC gets control (requirement symmetry)
-        resetAimForNextTurn(pc);
-        newWind();
-        updateHUD();
-        computePreview();
-      }
-    }
+
   }
 
   function deformTerrain(cx, cy, radius, strength){
@@ -296,14 +395,14 @@ function resizeCanvas(){
     }
   }
 
-  function applyBlastDamage(x,y, radius){
+  function applyBlastDamage(x,y, radius, damageScale=1){
     const blastR = radius * 1.05;
     [you, pc].forEach(t => {
       const tx = t.x;
-      const ty = t.y - 26*TANK_SF; // turret center-ish (scaled)
+      const ty = t.y - 26*tankSF(); // turret center-ish (scaled)
       const d = Math.hypot(x - tx, y - ty);
       if (d < blastR){
-        const dmg = Math.round(42 * (1 - d/blastR) + 6);
+        const dmg = Math.round((42 * (1 - d/blastR) + 6) * damageScale * mode().damageScale);
         t.hp = Math.max(0, t.hp - dmg);
       }
     });
@@ -319,8 +418,8 @@ function resizeCanvas(){
 
     gameState = 'ending';
     allowFire = false;
-    projectile = null;
-    explosion = null;
+    projectiles = [];
+    explosions = [];
 
     loser.alive = false;
 
@@ -336,7 +435,7 @@ function resizeCanvas(){
       const sp = 140 + Math.random()*260;
       wreckPieces.push({
         x: loser.x + (Math.random()*18 - 9),
-        y: (loser.y - 16*TANK_SF) + (Math.random()*16 - 8),
+        y: (loser.y - 16*tankSF()) + (Math.random()*16 - 8),
         vx: Math.cos(a) * sp,
         vy: Math.sin(a) * sp - (220 + Math.random()*220),
         r: (Math.random()*2-1)*Math.PI,
@@ -350,7 +449,7 @@ function resizeCanvas(){
     finale = {
       winner,
       x: loser.x,
-      y: (loser.y - 26*TANK_SF),
+      y: (loser.y - 26*tankSF()),
       t: 0,
       dur: 1.15
     };
@@ -371,7 +470,7 @@ function resizeCanvas(){
 
   // --- pc AI ---
   function pcTurn(){
-    if (gameState !== 'playing' || turn !== 'pc' || projectile) return;
+    if (gameState !== 'playing' || turn !== 'pc' || projectiles.length) return;
 
     const targetX = you.x;
     const targetY = you.y - 25;
@@ -410,26 +509,35 @@ function resizeCanvas(){
 
     pc.elev = clamp(best.elev + (Math.random()-0.5) * 2.0, 0, 45);
     pc.power = clamp(best.pow + (Math.random()-0.5) * 8, 30, 150);
+    pc.weapon = Math.random() < mode().pcTripleChance ? 'triple' : 'classic';
     spawnProjectile(pc);
   }
 
   // --- input ---
   function changeAngle(delta){
-    if (gameState !== 'playing' || turn !== 'you' || projectile) return;
+    if (gameState !== 'playing' || turn !== 'you' || projectiles.length) return;
     you.elev = clamp(you.elev + delta, 0, 45);
     computePreview();
     updateHUD();
     if (window.SFX) window.SFX.click();
   }
   function changePower(delta){
-    if (gameState !== 'playing' || turn !== 'you' || projectile) return;
+    if (gameState !== 'playing' || turn !== 'you' || projectiles.length) return;
     you.power = clamp(you.power + delta, 30, 150);
     computePreview();
     updateHUD();
     if (window.SFX) window.SFX.click();
   }
+  function changeWeapon(){
+    if (gameState !== 'playing' || turn !== 'you' || projectiles.length) return;
+    you.weapon = (you.weapon === 'classic') ? 'triple' : 'classic';
+    computePreview();
+    updateHUD();
+    if (window.SFX) window.SFX.click();
+  }
+
   function fire(){
-    if (gameState !== 'playing' || turn !== 'you' || projectile || !allowFire) return;
+    if (gameState !== 'playing' || turn !== 'you' || projectiles.length || !allowFire) return;
     allowFire = false;
     setTimeout(()=> allowFire = true, 450);
     spawnProjectile(you);
@@ -438,18 +546,20 @@ function resizeCanvas(){
 
   // --- HUD ---
   function updateHUD(){
-    ui.hpYou.style.width = `${clamp(you.hp,0,100)}%`;
-    ui.hpPc.style.width  = `${clamp(pc.hp,0,100)}%`;
+    ui.hpYou.style.width = `${clamp(you.hp / mode().maxHp * 100,0,100)}%`;
+    ui.hpPc.style.width  = `${clamp(pc.hp / mode().maxHp * 100,0,100)}%`;
     ui.hudAngle.textContent = `${Math.round(you.elev)}°`;
     ui.hudPower.textContent = `${Math.round(you.power)}`;
     ui.hudWind.textContent  = (world.wind>=0?'+':'') + world.wind.toFixed(1);
     ui.hudTurn.textContent  = turn === 'you' ? 'YOU' : 'PC';
+    if (ui.hudWeapon) ui.hudWeapon.textContent = WEAPONS[you.weapon]?.label || 'CLASSIC';
+    if (ui.hudMode) ui.hudMode.textContent = mode().name;
   }
 
   // --- physics (tanks) ---
   function updateTankPhysics(t, dt){
     // sample ground under left & right track contact points
-    const hw = CFG.tank.halfWidth;
+    const hw = tankHalfWidth();
     const gxL = clamp(t.x - hw, 0, world.W);
     const gxR = clamp(t.x + hw, 0, world.W);
     const gL = groundAt(gxL);
@@ -480,7 +590,7 @@ function resizeCanvas(){
     t.x = clamp(t.x, 60, world.W - 60);
 
     // collision / landing: tank bottom sits at supportY - bodyYOffset
-    const desiredY = supportY - CFG.tank.bodyYOffset;
+    const desiredY = supportY - tankBodyYOffset();
 
     if (t.y > desiredY){
       // landing / grounding
@@ -520,45 +630,65 @@ function resizeCanvas(){
 
   // --- projectile physics ---
   function updateProjectile(dt){
-    if (!projectile) return;
+    if (!projectiles.length) return;
 
-    projectile.vx += world.wind * dt;
-    projectile.vy += CFG.gravity * dt;
-    projectile.x  += projectile.vx * dt;
-    projectile.y  += projectile.vy * dt;
+    const survivors = [];
+    let lastOwner = null;
 
-    if (projectile.x < -120 || projectile.x > world.W + 120 || projectile.y > world.H + 160){
-      impact(projectile.x, Math.min(projectile.y, world.H), projectile.owner);
-      projectile = null;
-      return;
+    for (const p of projectiles){
+      p.age = (p.age || 0) + dt;
+      p.vx += world.wind * dt;
+      p.vy += CFG.gravity * dt;
+      p.x  += p.vx * dt;
+      p.y  += p.vy * dt;
+
+      if (p.type === 'tripleCarrier' && !p.split) {
+        const nearTarget = Math.abs(p.x - p.targetX) < p.splitDist;
+        const descending = p.vy > 20 && p.age > 0.38;
+        if (nearTarget && descending){
+          p.split = true;
+          survivors.push(...splitTripleProjectile(p));
+          continue;
+        }
+      }
+
+      if (p.x < -120 || p.x > world.W + 120 || p.y > world.H + 160){
+        lastOwner = p.owner;
+        impact(p, p.x, Math.min(p.y, world.H));
+        continue;
+      }
+
+      const gY = groundAt(p.x);
+      if (p.y >= gY){
+        lastOwner = p.owner;
+        impact(p, p.x, gY);
+        continue;
+      }
+
+      const hitTank = (t) => (t.alive !== false) && Math.hypot(p.x - t.x, p.y - (t.y - 26*tankSF())) < (26*tankSF());
+      if (hitTank(you) || hitTank(pc)){
+        lastOwner = p.owner;
+        impact(p, p.x, p.y);
+        continue;
+      }
+
+      survivors.push(p);
     }
 
-    const gY = groundAt(projectile.x);
-    if (projectile.y >= gY){
-      impact(projectile.x, gY);
-      projectile = null;
-      return;
-    }
-
-    // hit tanks (simple circle)
-    const hitTank = (t) => (t.alive !== false) && Math.hypot(projectile.x - t.x, projectile.y - (t.y - 26*TANK_SF)) < (26*TANK_SF);
-    if (hitTank(you) || hitTank(pc)){
-      impact(projectile.x, projectile.y);
-      projectile = null;
-      return;
-    }
+    projectiles = survivors;
+    if (!projectiles.length && lastOwner && gameState === 'playing') maybeAdvanceTurn(lastOwner);
   }
 
   // --- loop ---
   function update(dt){
     if (gameState !== 'playing') return;
 
-    // explosion anim
-    if (explosion){
-      explosion.t += dt;
-      explosion.r = explosion.maxR * Math.min(1, explosion.t / 0.18);
-      if (explosion.t > 0.55) explosion = null;
+    // explosion anims
+    for (const ex of explosions){
+      ex.t += dt;
+      ex.r = ex.maxR * Math.min(1, ex.t / 0.18);
     }
+    explosions = explosions.filter(ex => ex.t <= 0.55);
 
     // tanks physics always (so they can fall after blast)
     updateTankPhysics(you, dt);
@@ -705,7 +835,7 @@ function resizeCanvas(){
   }
 
   function drawPreview(){
-    if (!preview.points.length || turn !== 'you' || projectile) return;
+    if (!preview.points.length || turn !== 'you' || projectiles.length) return;
     ctx.save();
     ctx.strokeStyle = '#00f7ff';
     ctx.lineWidth = 2;
@@ -720,66 +850,75 @@ function resizeCanvas(){
   }
 
   function drawProjectile(){
-    if (!projectile) return;
-    ctx.save();
-    ctx.translate(projectile.x, projectile.y);
-    // orientation to velocity
-    const a = Math.atan2(projectile.vy, projectile.vx);
-    ctx.rotate(a);
+    if (!projectiles.length) return;
+    for (const projectile of projectiles){
+      ctx.save();
+      ctx.translate(projectile.x, projectile.y);
+      const a = Math.atan2(projectile.vy, projectile.vx);
+      ctx.rotate(a);
 
-    ctx.shadowColor = '#ffaa00';
-    ctx.shadowBlur = 18;
+      const triple = projectile.type === 'tripleCarrier' || projectile.type === 'tripleChild';
+      ctx.shadowColor = triple ? '#00f7ff' : '#ffaa00';
+      ctx.shadowBlur = triple ? 14 : 18;
 
-    // shell body (smaller, more realistic)
-    ctx.fillStyle = '#d8d8d8';
-    ctx.beginPath();
-    ctx.roundRect(-8, -2.2, 16, 4.4, 2.2);
-    ctx.fill();
+      const bodyLen = projectile.type === 'tripleChild' ? 12 : 16;
+      const bodyH = projectile.type === 'tripleChild' ? 3.6 : 4.4;
+      ctx.fillStyle = triple ? '#c8faff' : '#d8d8d8';
+      ctx.beginPath();
+      ctx.roundRect(-bodyLen/2, -bodyH/2, bodyLen, bodyH, 2.2);
+      ctx.fill();
 
-    // tip
-    ctx.fillStyle = '#f2f2f2';
-    ctx.beginPath();
-    ctx.moveTo(8, 0);
-    ctx.lineTo(4, -2.2);
-    ctx.lineTo(4, 2.2);
-    ctx.closePath();
-    ctx.fill();
+      ctx.fillStyle = '#f2f2f2';
+      ctx.beginPath();
+      ctx.moveTo(bodyLen/2, 0);
+      ctx.lineTo(bodyLen/2 - 4, -bodyH/2);
+      ctx.lineTo(bodyLen/2 - 4, bodyH/2);
+      ctx.closePath();
+      ctx.fill();
 
-    // tracer
-    ctx.shadowBlur = 0;
-    ctx.globalAlpha = 0.65;
-    ctx.fillStyle = '#ffaa00';
-    ctx.fillRect(-14, -1, 8, 2);
-    ctx.globalAlpha = 1;
+      ctx.shadowBlur = 0;
+      ctx.globalAlpha = 0.65;
+      ctx.fillStyle = triple ? '#00f7ff' : '#ffaa00';
+      ctx.fillRect(-bodyLen/2 - 6, -1, 6, 2);
+      ctx.globalAlpha = 1;
 
-    ctx.restore();
+      ctx.restore();
+    }
   }
 
   function drawExplosion(){
-    if (!explosion) return;
-    const {x,y,r,maxR} = explosion;
-    ctx.save();
+    if (!explosions.length) return;
+    for (const explosion of explosions){
+      const {x,y,r,maxR,palette} = explosion;
+      ctx.save();
 
-    const grad = ctx.createRadialGradient(x,y, 0, x,y, r*1.45);
-    grad.addColorStop(0, '#fff6b0');
-    grad.addColorStop(0.35, '#ff9a2a');
-    grad.addColorStop(0.72, '#ff2b2b');
-    grad.addColorStop(1, 'transparent');
+      const grad = ctx.createRadialGradient(x,y, 0, x,y, r*1.45);
+      if (palette === 'triple' || palette === 'split'){
+        grad.addColorStop(0, '#f9ffff');
+        grad.addColorStop(0.35, '#82f6ff');
+        grad.addColorStop(0.72, '#3a8cff');
+        grad.addColorStop(1, 'transparent');
+      } else {
+        grad.addColorStop(0, '#fff6b0');
+        grad.addColorStop(0.35, '#ff9a2a');
+        grad.addColorStop(0.72, '#ff2b2b');
+        grad.addColorStop(1, 'transparent');
+      }
 
-    ctx.fillStyle = grad;
-    ctx.beginPath();
-    ctx.arc(x,y, r*1.45, 0, Math.PI*2);
-    ctx.fill();
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(x,y, r*1.45, 0, Math.PI*2);
+      ctx.fill();
 
-    // shock ring
-    ctx.globalAlpha = 0.35;
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.arc(x,y, Math.min(maxR*1.1, r*1.2), 0, Math.PI*2);
-    ctx.stroke();
+      ctx.globalAlpha = 0.35;
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(x,y, Math.min(maxR*1.1, r*1.2), 0, Math.PI*2);
+      ctx.stroke();
 
-    ctx.restore();
+      ctx.restore();
+    }
   }
 
   function drawFinale(){
@@ -869,7 +1008,7 @@ function resizeCanvas(){
     ctx.shadowBlur = 16;
 
     // scale (V2c: 50% of V2b)
-    const s = TANK_SCALE;
+    const s = tankScale();
 
     // --- separate tracks (left/right), with links ---
     const trackLen = 120*s;
@@ -1083,7 +1222,7 @@ function resizeCanvas(){
   function getGunMuzzleLocal(t){
     // local point where barrel ends (approx), for projectile spawn
     // NOTE: local space assumes "forward" is +X. Facing is applied in getGunMuzzleWorld().
-    const s = TANK_SCALE;
+    const s = tankScale();
 
     const localAim = (t.elev * Math.PI/180); // 0..45 degrees above horizontal
     const base = { x: 20*s, y: -30*s };      // closer to turret front for better "connected" barrel
@@ -1127,14 +1266,28 @@ function resizeCanvas(){
   }
 
   function loop(){
+    const orientationLocked = updateOrientationLock();
     const now = performance.now();
     const dt = Math.min(0.05, (now - lastTime)/1000);
     lastTime = now;
 
-    if (gameState === 'playing') update(dt);
-    else if (gameState === 'ending') updateEnding(dt);
-    render();
+    if (!orientationLocked) {
+      if (gameState === 'playing') update(dt);
+      else if (gameState === 'ending') updateEnding(dt);
+    }
+    if (!orientationLocked) render();
     requestAnimationFrame(loop);
+  }
+
+  function showModeMenu(title='Choose difficulty'){
+    ui.modeTitle.textContent = title;
+    ui.modeMenu.style.display = 'flex';
+  }
+
+  function selectMode(key){
+    difficultyKey = key;
+    ui.modeMenu.style.display = 'none';
+    initGame();
   }
 
   // --- init / start ---
@@ -1145,7 +1298,7 @@ function resizeCanvas(){
     placeTanks();
     newWind();
 
-    you.hp = 100; pc.hp = 100;
+    you.hp = mode().maxHp; pc.hp = mode().maxHp;
     you.alive = true; pc.alive = true;
     you.elev = 28; you.power = 85;
     pc.elev = 28; pc.power = 85;
@@ -1155,21 +1308,22 @@ function resizeCanvas(){
     you.lastSupportY = groundAt(you.x);
     pc.lastSupportY = groundAt(pc.x);
 
-    projectile = null;
-    explosion = null;
+    projectiles = [];
+    explosions = [];
     finale = null;
     wreckPieces = [];
     camShake.amp = 0;
     allowFire = true;
     turn = 'you';
+    you.weapon = 'classic';
+    pc.weapon = 'classic';
 
     updateHUD();
     computePreview();
     ui.gameover.style.display = 'none';
 
-    // Mobile controls visibility
-    if (window.innerWidth < 900 || matchMedia('(pointer: coarse)').matches) ui.mobile.style.display = 'flex';
-    else ui.mobile.style.display = 'none';
+    // Mobile controls visibility / orientation lock
+    updateOrientationLock();
   }
 
   // keyboard
@@ -1180,6 +1334,7 @@ function resizeCanvas(){
     if (e.code === 'ArrowRight') { e.preventDefault(); changeAngle(2); }
     if (e.code === 'ArrowUp')    { e.preventDefault(); changePower(3); }
     if (e.code === 'ArrowDown')  { e.preventDefault(); changePower(-3); }
+    if (e.code === 'KeyQ')       { e.preventDefault(); changeWeapon(); }
     if (e.code === 'Space')      { e.preventDefault(); fire(); }
   }, { passive:false });
 
@@ -1193,6 +1348,7 @@ function resizeCanvas(){
       if (act === 'angleDn') changeAngle(-2);
       if (act === 'powerUp') changePower(3);
       if (act === 'powerDn') changePower(-3);
+      if (act === 'weapon') changeWeapon();
       if (act === 'fire') fire();
     }, { passive:false });
   });
@@ -1200,11 +1356,19 @@ function resizeCanvas(){
   ui.btnRestart.addEventListener('click', ()=>{
     if (window.SFX) window.SFX.click();
     ui.gameover.style.display = 'none';
-    initGame();
+    showModeMenu('Choose difficulty');
+  });
+
+  document.querySelectorAll('[data-mode]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (window.SFX) window.SFX.click();
+      selectMode(btn.dataset.mode);
+    });
   });
 
   window.addEventListener('resize', ()=>{
-    if (gameState !== 'playing') return;
+    updateOrientationLock();
+    if (gameState !== 'playing' && gameState !== 'ending') return;
     resizeCanvas();
     generateTerrain();
     // keep positions but clamp
@@ -1233,7 +1397,8 @@ function resizeCanvas(){
       clearInterval(interval);
       splash.style.display = 'none';
       gameContainer.style.display = 'block';
-      initGame();
+      updateOrientationLock();
+      showModeMenu('Choose difficulty');
     }, 3600);
   }
 
@@ -1243,7 +1408,14 @@ function resizeCanvas(){
     if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); startFromSplash(); }
   });
 
+  window.addEventListener('orientationchange', ()=> setTimeout(updateOrientationLock, 60));
+  if (window.visualViewport) {
+    visualViewport.addEventListener('resize', updateOrientationLock);
+    visualViewport.addEventListener('scroll', updateOrientationLock);
+  }
+
   // go
+  updateOrientationLock();
   resizeCanvas();
   lastTime = performance.now();
   loop();

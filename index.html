@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
-  <title>Battle Cannons</title>
+  <title>RETRO WAVE · SPH CANNON DUEL (V2)</title>
   <style>
     * { box-sizing: border-box; }
     html, body { margin:0; padding:0; width:100%; height:100%; overflow:hidden; background:#000; font-family:'Courier New', Courier, monospace; }
@@ -106,12 +106,120 @@
     }
     @keyframes pulse{ 0%{opacity:.25} 50%{opacity:1} 100%{opacity:.25} }
 
+    
+
+    /* Mobile portrait lock / rotate screen */
+    #rotate-lock{
+      position:fixed; inset:0;
+      display:none; align-items:center; justify-content:center;
+      z-index:5000;
+      background:
+        repeating-linear-gradient(
+          0deg,
+          var(--zx2) 0px, var(--zx2) 6px,
+          var(--zx3) 6px, var(--zx3) 12px,
+          var(--zx4) 12px, var(--zx4) 18px,
+          var(--zx5) 18px, var(--zx5) 24px,
+          var(--zx1) 24px, var(--zx1) 30px,
+          var(--zx6) 30px, var(--zx6) 36px,
+          var(--zx7) 36px, var(--zx7) 42px,
+          var(--zx0) 42px, var(--zx0) 50px
+        );
+      background-size:100% 120px;
+      animation:zxBorder .20s linear infinite;
+    }
+    #rotate-lock.show{ display:flex; }
+    .rotate-inner{
+      position:relative;
+      width:min(760px, 88vw);
+      min-height:min(78vh, 760px);
+      background:rgba(4,0,18,.98);
+      border:2px solid rgba(0,247,255,.75);
+      box-shadow:0 0 26px rgba(0,247,255,.4), inset 0 0 40px rgba(255,43,214,.12);
+      display:flex; flex-direction:column; align-items:center; justify-content:center;
+      text-align:center; padding:32px 24px; overflow:hidden;
+    }
+    .rotate-inner::before{
+      content:""; position:absolute; inset:0;
+      background:repeating-linear-gradient(
+        to bottom,
+        rgba(255,255,255,.07) 0px,
+        rgba(255,255,255,.07) 1px,
+        rgba(0,0,0,0) 2px,
+        rgba(0,0,0,0) 4px
+      );
+      opacity:.22; pointer-events:none;
+      mix-blend-mode:screen;
+    }
+    .rotate-inner::after{
+      content:""; position:absolute; inset:0;
+      background:radial-gradient(circle at 50% 40%, rgba(0,247,255,.18), rgba(255,43,214,.12) 28%, rgba(0,0,0,0) 62%);
+      pointer-events:none;
+    }
+    .rotate-phone{
+      position:relative; width:min(32vw, 200px); aspect-ratio: 10 / 16;
+      border:4px solid #00f7ff; border-radius:24px;
+      box-shadow:0 0 12px #00f7ff, 0 0 32px rgba(0,247,255,.45), inset 0 0 18px rgba(0,247,255,.18);
+      transform-origin:50% 50%;
+      animation:rotatePhone 1.8s ease-in-out infinite;
+      margin-bottom:28px;
+      background:linear-gradient(180deg, rgba(0,247,255,.08), rgba(255,43,214,.08));
+    }
+    .rotate-phone::before{
+      content:""; position:absolute; left:50%; top:10px; transform:translateX(-50%);
+      width:34%; height:8px; border-radius:99px; background:#00f7ff;
+      box-shadow:0 0 10px rgba(0,247,255,.9);
+    }
+    .rotate-phone::after{
+      content:""; position:absolute; left:50%; bottom:10px; transform:translateX(-50%);
+      width:18px; height:18px; border-radius:50%; border:3px solid #ff2bd6;
+      box-shadow:0 0 12px rgba(255,43,214,.9);
+    }
+    .rotate-arrow{
+      position:absolute; width:170%; height:170%; left:-35%; top:-35%; pointer-events:none;
+      animation:rotateArrow 1.8s ease-in-out infinite;
+      filter:drop-shadow(0 0 10px rgba(255,233,74,.95)) drop-shadow(0 0 20px rgba(255,233,74,.45));
+    }
+    .rotate-title{
+      position:relative; z-index:1;
+      font-size:clamp(28px, 6vw, 62px);
+      font-weight:900; line-height:1.04;
+      color:#ffef57; text-shadow:2px 2px 0 #ff2bd6, 4px 4px 0 #00f7ff;
+      letter-spacing:4px; margin-bottom:12px;
+    }
+    .rotate-sub{
+      position:relative; z-index:1;
+      font-size:clamp(14px, 2.4vw, 24px);
+      color:#bdfcff; opacity:.95; letter-spacing:1px; line-height:1.45;
+      max-width:min(560px, 90%);
+    }
+    .rotate-start{
+      margin-top:20px; position:relative; z-index:1;
+      font-size:clamp(13px, 2.2vw, 22px);
+      color:#00d700; border:1px solid rgba(0,215,0,.45);
+      padding:10px 16px; background:rgba(0,215,0,.08);
+      box-shadow:0 0 14px rgba(0,215,0,.15);
+      animation:pulse 1.2s infinite;
+    }
+    @keyframes rotatePhone{
+      0%, 18%{ transform:rotate(0deg) scale(1); }
+      34%, 78%{ transform:rotate(90deg) scale(1.02); }
+      100%{ transform:rotate(90deg) scale(1.02); }
+    }
+    @keyframes rotateArrow{
+      0%, 18%{ transform:rotate(0deg); opacity:.92; }
+      34%, 78%{ transform:rotate(90deg); opacity:1; }
+      100%{ transform:rotate(90deg); opacity:.98; }
+    }
+
     @media (prefers-reduced-motion: reduce){
       #splash-screen{ animation:none; }
       .tape-bars{ animation:none; }
       .brand{ animation:none; }
       .loader-text{ animation:none; }
       .click-hint{ animation:none; }
+      #rotate-lock{ animation:none; }
+      .rotate-phone, .rotate-arrow{ animation:none; }
     }
 
     /* main game */
@@ -190,6 +298,20 @@
   </div>
 
   <div id="game-container">
+
+    <div id="rotate-lock" aria-live="polite" aria-label="Rotate device to landscape">
+      <div class="rotate-inner">
+        <div class="rotate-phone" aria-hidden="true">
+          <svg class="rotate-arrow" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+            <path d="M145 45c-11-11-27-18-45-18-33 0-60 27-60 60 0 33 27 60 60 60 24 0 44-14 54-35" fill="none" stroke="#ffe94a" stroke-width="10" stroke-linecap="round"/>
+            <path d="M132 28l28 3-3 28" fill="none" stroke="#ffe94a" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <div class="rotate-title">ROTATE DEVICE<br>TO LANDSCAPE</div>
+        <div class="rotate-sub">Mobile portrait mode is locked for Battle Cannons.<br>Landscape gives the intended combat view and controls.</div>
+        <div class="rotate-start">PRESS START AFTER ROTATION</div>
+      </div>
+    </div>
     <canvas id="c"></canvas>
 
     <div id="hud">
@@ -208,6 +330,8 @@
         <span class="hudLabel">ANGLE</span><span class="hudVal mono" id="hudAngle">45°</span>
         <span class="hudLabel">POWER</span><span class="hudVal mono" id="hudPower">85</span>
         <span class="hudLabel">WIND</span><span class="hudVal mono" id="hudWind">+0.0</span>
+        <span class="hudLabel">WEAPON</span><span class="hudVal mono" id="hudWeapon">CLASSIC</span>
+        <span class="hudLabel">MODE</span><span class="hudVal mono" id="hudMode">CLASSIC</span>
         <span class="hudLabel">TURN</span><span class="hudVal mono" id="hudTurn">YOU</span>
       </div>
     </div>
@@ -222,6 +346,7 @@
         <button class="mBtn" data-act="powerDn" type="button">⚡ POWER -</button>
       </div>
       <div class="mPad">
+        <button class="mBtn" data-act="weapon" type="button">☰ WEAPON</button>
         <button class="mBtn neon" data-act="fire" type="button">🔥 FIRE</button>
       </div>
     </div>
@@ -231,6 +356,19 @@
         <h2 id="goTitle">Game Over</h2>
         <p id="goSub"></p>
         <button id="btnRestart" type="button">PLAY AGAIN</button>
+      </div>
+    </div>
+
+    <div class="overlay" id="modeMenu" style="display:none;">
+      <div class="card">
+        <h2 id="modeTitle">Choose difficulty</h2>
+        <p>Select combat complexity</p>
+        <div style="display:grid;gap:12px;">
+          <button data-mode="classic" type="button">CLASSIC · 100 HP · NORMAL BLAST · WIND x1.0</button>
+          <button data-mode="hardcore" type="button">HARDCORE · 150 HP · SMALLER BLAST · WIND x1.4</button>
+          <button data-mode="nightmare" type="button">NIGHTMARE · 200 HP · TIGHT BLAST · WIND x1.8</button>
+        </div>
+        <p style="margin-top:18px;font-size:min(18px,4vw);opacity:.82;">Q / weapon button = switch CLASSIC ↔ TRIPLE SHELLS</p>
       </div>
     </div>
   </div>
