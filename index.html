@@ -285,6 +285,69 @@
       border:none; border-radius:30px; padding:15px 40px;
       font-size:24px; font-weight:bold; color:#0a0420; cursor:pointer;
     }
+    /* Mobile landscape balancing */
+    @media (pointer: coarse) and (orientation: landscape) {
+      #hud{
+        left:10px; right:10px; top:8px; gap:8px;
+        align-items:flex-start;
+      }
+      .hudBox{
+        padding:7px 10px;
+        border-radius:14px;
+        box-shadow:0 0 10px rgba(0,247,255,.22);
+      }
+      .hudLabel{ font-size:10px; letter-spacing:.8px; }
+      .hudVal, .mono{ font-size:12px; }
+      .barWrap{ width:86px; height:10px; }
+      #hud > .hudBox:first-child{ gap:10px !important; }
+      #hud > .hudBox:last-child{ gap:10px !important; flex-wrap:wrap; justify-content:flex-end; }
+
+      #mobile{
+        left:8px; right:8px; bottom:8px; gap:8px;
+        align-items:stretch;
+      }
+      .mPad{
+        gap:6px; padding:6px; border-radius:16px;
+        background:rgba(10,6,30,.82);
+        box-shadow:0 0 10px rgba(0,247,255,.16);
+      }
+      .mBtn{
+        min-width:0;
+        padding:8px 10px;
+        font-size:11px;
+        line-height:1.05;
+        border-radius:14px;
+        min-height:54px;
+      }
+      #mobile > .mPad:nth-child(1){ flex:1.08; }
+      #mobile > .mPad:nth-child(2){ flex:1.2; }
+      #mobile > .mPad:nth-child(3){ flex:1; }
+      #mobile > .mPad:nth-child(3) .mBtn{ flex:1; }
+    }
+
+    @media (pointer: coarse) and (orientation: landscape) and (max-height: 500px) {
+      #hud{ top:6px; }
+      .hudBox{ padding:6px 8px; border-radius:12px; }
+      .hudLabel{ font-size:9px; }
+      .hudVal, .mono{ font-size:11px; }
+      .barWrap{ width:74px; height:8px; }
+      #hud > .hudBox:last-child{ gap:8px !important; }
+
+      #mobile{ left:6px; right:6px; bottom:6px; gap:6px; }
+      .mPad{ gap:5px; padding:5px; border-radius:14px; }
+      .mBtn{
+        padding:6px 8px;
+        font-size:10px;
+        min-height:46px;
+        border-radius:12px;
+      }
+    }
+
+    @media (pointer: coarse) and (orientation: landscape) and (max-width: 900px) {
+      #hud{ flex-direction:column; align-items:stretch; }
+      #hud > .hudBox:last-child{ justify-content:space-between; }
+    }
+
   </style>
 </head>
 <body>
