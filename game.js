@@ -5,6 +5,9 @@
   const splash = document.getElementById('splash-screen');
   const gameContainer = document.getElementById('game-container');
   const loadingText = document.getElementById('loading-text');
+  const displayToggle = document.getElementById('display-toggle');
+  const displayHelp = document.getElementById('display-help');
+  const displayHelpText = document.getElementById('display-help-text');
 
   const canvas = document.getElementById('c');
   const ctx = canvas.getContext('2d', { alpha:false });
@@ -58,40 +61,69 @@
 
 
 
-  function isMobileLike(){
-    const uaMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobile/i.test(navigator.userAgent || '');
-    const coarse = window.matchMedia && matchMedia('(pointer: coarse)').matches;
-    const touchCapable = ('ontouchstart' in window) || (navigator.maxTouchPoints || 0) > 0;
-    const vv = window.visualViewport;
-    const vw = vv ? vv.width : window.innerWidth;
-    const vh = vv ? vv.height : window.innerHeight;
-    const shortSide = Math.min(vw, vh);
-    const portrait = vh > vw;
-    return uaMobile || coarse || (touchCapable && shortSide <= 1280) || portrait;
-  }
-
-  function isPortraitLocked(){
-    const vv = window.visualViewport;
-    const vw = vv ? vv.width : window.innerWidth;
-    const vh = vv ? vv.height : window.innerHeight;
-    return isMobileLike() && vh > vw;
-  }
+  const appleMobile = /iPhone|iPad|iPod/i.test(navigator.userAgent) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const mobileLayout = appleMobile || /Android|Mobile/i.test(navigator.userAgent) ||
+    matchMedia('(pointer: coarse)').matches;
+  const standalone = navigator.standalone || matchMedia('(display-mode: standalone)').matches;
+  const portrait = matchMedia('(orientation: portrait)');
+  let orientationLocked = false;
 
   function updateOrientationLock(){
-    const locked = isPortraitLocked();
-    if (ui.rotateLock) {
-      ui.rotateLock.classList.toggle('show', locked);
-      ui.rotateLock.style.display = locked ? 'flex' : 'none';
-    }
-    document.body.style.overflow = locked ? 'hidden' : 'hidden';
-    if (locked) {
-      ui.mobile.style.display = 'none';
-    } else if (gameState === 'playing' || gameState === 'ending') {
-      if (window.innerWidth < 900 || isMobileLike()) ui.mobile.style.display = 'flex';
-      else ui.mobile.style.display = 'none';
-    }
-    return locked;
+    orientationLocked = mobileLayout && portrait.matches;
+    ui.rotateLock.classList.toggle('show', orientationLocked);
+    ui.mobile.inert = orientationLocked;
+    ui.modeMenu.inert = orientationLocked;
+    ui.gameover.inert = orientationLocked;
   }
+
+  function fullscreenActive(){
+    return Boolean(document.fullscreenElement || document.webkitFullscreenElement);
+  }
+
+  function syncFullscreenButton(){
+    const active = fullscreenActive();
+    const label = active ? 'Exit full screen' : 'Full screen';
+    displayToggle.setAttribute('aria-pressed', String(active));
+    displayToggle.setAttribute('aria-label', label);
+    displayToggle.title = label;
+  }
+
+  function showFullscreenHelp(){
+    displayHelpText.textContent = appleMobile
+      ? 'In Safari, tap Share → Add to Home Screen. Turn on Open as Web App if shown, then launch Battle Cannons from its Home Screen icon.'
+      : 'Open Battle Cannons in your phone’s browser, then tap the full-screen button again.';
+    if (!displayHelp.open) displayHelp.showModal();
+  }
+
+  displayToggle.addEventListener('click', async () => {
+    if (fullscreenActive()) {
+      const exit = document.exitFullscreen || document.webkitExitFullscreen;
+      try { await exit.call(document); } catch { syncFullscreenButton(); }
+      return;
+    }
+
+    const target = document.documentElement;
+    const request = target.requestFullscreen || target.webkitRequestFullscreen;
+    const enabled = document.fullscreenEnabled ?? document.webkitFullscreenEnabled;
+    if (!request || enabled === false) {
+      showFullscreenHelp();
+      return;
+    }
+    try {
+      await request.call(target);
+    } catch {
+      showFullscreenHelp();
+      return;
+    }
+    // Screen orientation locking is optional even when fullscreen is available.
+    if (fullscreenActive()) {
+      try { await screen.orientation?.lock?.('landscape'); } catch {}
+    }
+  });
+  document.addEventListener('fullscreenchange', syncFullscreenButton);
+  document.addEventListener('webkitfullscreenchange', syncFullscreenButton);
+  document.addEventListener('webkitfullscreenerror', showFullscreenHelp);
 
   const CFG = {
     gravity: 520,
@@ -140,13 +172,11 @@
     // Barrel elevation is constrained to 0..45 degrees from horizontal, toward the opponent.
     return (t.facing === 1) ? t.elev : (180 - t.elev);
   }
-function resizeCanvas(){
-    const w = Math.max(320, Math.floor(window.innerWidth));
-    const h = Math.max(240, Math.floor(window.innerHeight));
-    canvas.width = w;
-    canvas.height = h;
-    canvas.style.width = w+'px';
-    canvas.style.height = h+'px';
+  function sizeArena(){
+    // CSS fits the canvas to the viewport while the round keeps its terrain and physics.
+    const view = canvas.getBoundingClientRect();
+    canvas.width = Math.max(320, Math.round(view.width));
+    canvas.height = Math.max(240, Math.round(view.height));
   }
 
   // --- terrain ---
@@ -251,6 +281,7 @@ function resizeCanvas(){
   let camShake = { amp: 0 };
   let turn = 'you';
   let allowFire = true;
+  let pcDelay = 0;
 
   const preview = { points: [], maxSteps: 65, dt: 1/34 };
 
@@ -328,7 +359,7 @@ function resizeCanvas(){
       newWind();
       updateHUD();
       computePreview();
-      setTimeout(pcTurn, 650);
+      pcDelay = 0.65;
     } else {
       turn = 'you';
       resetAimForNextTurn(pc);
@@ -698,6 +729,10 @@ function resizeCanvas(){
     if (you.hp <= 0) { startFinale(you, 'pc'); return; }
     if (pc.hp  <= 0) { startFinale(pc,  'you'); return; }
 
+    if (pcDelay > 0) {
+      pcDelay = Math.max(0, pcDelay - dt);
+      if (pcDelay === 0) pcTurn();
+    }
     updateProjectile(dt);
     updateHUD();
   }
@@ -1266,12 +1301,11 @@ function resizeCanvas(){
   }
 
   function loop(){
-    const orientationLocked = updateOrientationLock();
     const now = performance.now();
     const dt = Math.min(0.05, (now - lastTime)/1000);
     lastTime = now;
 
-    if (!orientationLocked) {
+    if (!orientationLocked && !displayHelp.open) {
       if (gameState === 'playing') update(dt);
       else if (gameState === 'ending') updateEnding(dt);
     }
@@ -1293,7 +1327,8 @@ function resizeCanvas(){
   // --- init / start ---
   function initGame(){
     gameState = 'playing';
-    resizeCanvas();
+    gameContainer.classList.add('controls-on');
+    sizeArena();
     generateTerrain();
     placeTanks();
     newWind();
@@ -1315,20 +1350,18 @@ function resizeCanvas(){
     camShake.amp = 0;
     allowFire = true;
     turn = 'you';
+    pcDelay = 0;
     you.weapon = 'classic';
     pc.weapon = 'classic';
 
     updateHUD();
     computePreview();
     ui.gameover.style.display = 'none';
-
-    // Mobile controls visibility / orientation lock
-    updateOrientationLock();
   }
 
   // keyboard
   window.addEventListener('keydown', (e)=>{
-    if (gameState !== 'playing') return;
+    if (gameState !== 'playing' || orientationLocked || displayHelp.open || e.target === displayToggle) return;
 
     if (e.code === 'ArrowLeft')  { e.preventDefault(); changeAngle(-2); }
     if (e.code === 'ArrowRight') { e.preventDefault(); changeAngle(2); }
@@ -1356,6 +1389,7 @@ function resizeCanvas(){
   ui.btnRestart.addEventListener('click', ()=>{
     if (window.SFX) window.SFX.click();
     ui.gameover.style.display = 'none';
+    gameContainer.classList.remove('controls-on');
     showModeMenu('Choose difficulty');
   });
 
@@ -1364,20 +1398,6 @@ function resizeCanvas(){
       if (window.SFX) window.SFX.click();
       selectMode(btn.dataset.mode);
     });
-  });
-
-  window.addEventListener('resize', ()=>{
-    updateOrientationLock();
-    if (gameState !== 'playing' && gameState !== 'ending') return;
-    resizeCanvas();
-    generateTerrain();
-    // keep positions but clamp
-    you.x = clamp(you.x, 60, world.W-60);
-    pc.x  = clamp(pc.x,  60, world.W-60);
-    // keep physics stable
-    you.lastSupportY = groundAt(you.x);
-    pc.lastSupportY  = groundAt(pc.x);
-    computePreview();
   });
 
   // splash click/tap/enter -> start
@@ -1396,27 +1416,23 @@ function resizeCanvas(){
     setTimeout(()=>{
       clearInterval(interval);
       splash.style.display = 'none';
-      gameContainer.style.display = 'block';
+      gameContainer.hidden = false;
       updateOrientationLock();
       showModeMenu('Choose difficulty');
     }, 3600);
   }
 
   splash.addEventListener('click', startFromSplash);
-  splash.addEventListener('pointerdown', (e)=>{ e.preventDefault(); startFromSplash(); }, { passive:false });
   splash.addEventListener('keydown', (e)=>{
     if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); startFromSplash(); }
   });
 
-  window.addEventListener('orientationchange', ()=> setTimeout(updateOrientationLock, 60));
-  if (window.visualViewport) {
-    visualViewport.addEventListener('resize', updateOrientationLock);
-    visualViewport.addEventListener('scroll', updateOrientationLock);
-  }
+  portrait.addEventListener('change', updateOrientationLock);
 
   // go
+  document.body.classList.toggle('mobile-layout', mobileLayout);
+  displayToggle.hidden = !mobileLayout || standalone;
   updateOrientationLock();
-  resizeCanvas();
   lastTime = performance.now();
   loop();
 })();

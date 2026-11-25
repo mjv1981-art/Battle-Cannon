@@ -2,7 +2,10 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Battle Cannons">
   <title>RETRO WAVE · SPH CANNON DUEL (V2)</title>
 <meta property="og:type" content="website">
 <meta property="og:title" content="Battle Cannons">
@@ -15,10 +18,14 @@
 
   <style>
     * { box-sizing: border-box; }
-    html, body { margin:0; padding:0; width:100%; height:100%; overflow:hidden; background:#000; font-family:'Courier New', Courier, monospace; }
+    html, body { margin:0; padding:0; width:100%; height:100%; overflow:hidden; overscroll-behavior:none; background:#000; font-family:'Courier New', Courier, monospace; }
 
     /* ===== Retro splash with ZX tape-loader border stripes (V2d) ===== */
     :root{
+      --safe-top:max(6px, env(safe-area-inset-top));
+      --safe-right:max(8px, env(safe-area-inset-right));
+      --safe-bottom:max(6px, env(safe-area-inset-bottom));
+      --safe-left:max(8px, env(safe-area-inset-left));
       --zx0:#000000;
       --zx1:#0000d7; /* blue */
       --zx2:#d70000; /* red */
@@ -57,6 +64,7 @@
       animation:zxBorder .22s linear infinite;
       box-sizing:border-box;
     }
+    #splash-screen, #game-container{ height:100dvh; }
 
     @keyframes zxBorder{ 0%{background-position:0 0} 100%{background-position:0 120px} }
 
@@ -202,14 +210,6 @@
       color:#bdfcff; opacity:.95; letter-spacing:1px; line-height:1.45;
       max-width:min(560px, 90%);
     }
-    .rotate-start{
-      margin-top:20px; position:relative; z-index:1;
-      font-size:clamp(13px, 2.2vw, 22px);
-      color:#00d700; border:1px solid rgba(0,215,0,.45);
-      padding:10px 16px; background:rgba(0,215,0,.08);
-      box-shadow:0 0 14px rgba(0,215,0,.15);
-      animation:pulse 1.2s infinite;
-    }
     @keyframes rotatePhone{
       0%, 18%{ transform:rotate(0deg) scale(1); }
       34%, 78%{ transform:rotate(90deg) scale(1.02); }
@@ -232,8 +232,9 @@
     }
 
     /* main game */
-    #game-container{ position:fixed; inset:0; display:none; }
-    canvas{ display:block; width:100%; height:100%; background:#0a0620; }
+    #game-container{ position:fixed; inset:0; }
+    #game-container[hidden]{ display:none; }
+    canvas{ display:block; width:100%; height:100%; min-height:0; background:#0a0620; }
 
     /* HUD */
     #hud{
@@ -253,6 +254,7 @@
       box-shadow:0 0 15px rgba(0,247,255,.3);
     }
     .hudLabel{ font-size:11px; text-transform:uppercase; opacity:.9; letter-spacing:1px; }
+    .hudStat{ display:flex; align-items:center; gap:8px; white-space:nowrap; }
     .mono{ font-variant-numeric:tabular-nums; font-weight:bold; }
     .barWrap{ width:120px; height:12px; border-radius:999px; background:rgba(0,0,0,.5); overflow:hidden; border:1px solid rgba(255,255,255,.2); }
     .bar{ height:100%; background:linear-gradient(90deg,#52ff8a,#ffe94a,#ff3b3b); transform-origin:left; width:100%; }
@@ -272,6 +274,9 @@
       color:#07031a; touch-action:manipulation; border:none; font-size:14px; cursor:pointer;
     }
     .mBtn.neon{ background:linear-gradient(90deg,#ff2bd6,#00f7ff); color:#0a0420; }
+    @media (max-width:899px){
+      #game-container.controls-on #mobile{ display:flex; }
+    }
 
     .overlay{
       position:absolute; inset:0; display:none; align-items:center; justify-content:center;
@@ -294,67 +299,74 @@
       border:none; border-radius:30px; padding:15px 40px;
       font-size:24px; font-weight:bold; color:#0a0420; cursor:pointer;
     }
-    /* Mobile landscape balancing */
-    @media (pointer: coarse) and (orientation: landscape) {
-      #hud{
-        left:10px; right:10px; top:8px; gap:8px;
-        align-items:flex-start;
-      }
-      .hudBox{
-        padding:7px 10px;
-        border-radius:14px;
-        box-shadow:0 0 10px rgba(0,247,255,.22);
-      }
-      .hudLabel{ font-size:10px; letter-spacing:.8px; }
-      .hudVal, .mono{ font-size:12px; }
-      .barWrap{ width:86px; height:10px; }
-      #hud > .hudBox:first-child{ gap:10px !important; }
-      #hud > .hudBox:last-child{ gap:10px !important; flex-wrap:wrap; justify-content:flex-end; }
-
-      #mobile{
-        left:8px; right:8px; bottom:8px; gap:8px;
-        align-items:stretch;
-      }
-      .mPad{
-        gap:6px; padding:6px; border-radius:16px;
-        background:rgba(10,6,30,.82);
-        box-shadow:0 0 10px rgba(0,247,255,.16);
-      }
-      .mBtn{
-        min-width:0;
-        padding:8px 10px;
-        font-size:11px;
-        line-height:1.05;
-        border-radius:14px;
-        min-height:54px;
-      }
-      #mobile > .mPad:nth-child(1){ flex:1.08; }
-      #mobile > .mPad:nth-child(2){ flex:1.2; }
-      #mobile > .mPad:nth-child(3){ flex:1; }
-      #mobile > .mPad:nth-child(3) .mBtn{ flex:1; }
+    #display-toggle{
+      position:absolute; top:var(--safe-top); right:var(--safe-right); z-index:5100;
+      width:44px; height:44px; border:1px solid #00f7ff; border-radius:12px;
+      background:#140528; color:#bdfcff; font:26px/1 system-ui,sans-serif;
+      cursor:pointer; touch-action:manipulation;
     }
-
-    @media (pointer: coarse) and (orientation: landscape) and (max-height: 500px) {
-      #hud{ top:6px; }
-      .hudBox{ padding:6px 8px; border-radius:12px; }
-      .hudLabel{ font-size:9px; }
-      .hudVal, .mono{ font-size:11px; }
-      .barWrap{ width:74px; height:8px; }
-      #hud > .hudBox:last-child{ gap:8px !important; }
-
-      #mobile{ left:6px; right:6px; bottom:6px; gap:6px; }
-      .mPad{ gap:5px; padding:5px; border-radius:14px; }
-      .mBtn{
-        padding:6px 8px;
-        font-size:10px;
-        min-height:46px;
-        border-radius:12px;
-      }
+    #display-toggle[aria-pressed="true"]{ background:#bdfcff; color:#140528; }
+    #display-help{
+      margin:auto; width:min(460px, 82vw); max-height:82dvh;
+      padding:clamp(12px, 4vmin, 24px); overflow:auto;
     }
+    #display-help::backdrop{ background:rgba(0,0,0,.85); }
+    #display-help h2{ margin:0 0 8px; font-size:20px; }
+    #display-help p{ margin:0 0 12px; font-size:14px; line-height:1.4; }
+    #display-help button{ min-height:44px; padding:8px 20px; font-size:14px; }
 
-    @media (pointer: coarse) and (orientation: landscape) and (max-width: 900px) {
-      #hud{ flex-direction:column; align-items:stretch; }
-      #hud > .hudBox:last-child{ justify-content:space-between; }
+    /* Keep the HUD and touch controls clear of the battlefield and screen cutouts. */
+    .mobile-layout #game-container:not([hidden]){
+      display:grid; grid-template: minmax(44px, auto) minmax(0, 1fr) auto / minmax(0, 1fr);
+      padding:var(--safe-top) var(--safe-right) var(--safe-bottom) var(--safe-left);
+      gap:4px;
+      background:#07031a;
+    }
+    .mobile-layout #hud{
+      position:static; gap:6px; flex-wrap:nowrap; align-items:stretch;
+    }
+    .mobile-layout #display-toggle:not([hidden]) ~ #hud{ padding-right:50px; }
+    .mobile-layout .hudBox{ padding:4px 6px; gap:6px; border-radius:10px; }
+    .mobile-layout .hudBox:last-child{ flex:1; justify-content:space-around; }
+    .mobile-layout .hudLabel{ font-size:9px; letter-spacing:0; }
+    .mobile-layout .hudVal{ font-size:clamp(9px, 1.7vw, 13px); }
+    .mobile-layout .hudStat{ flex-direction:column; gap:2px; }
+    .mobile-layout .barWrap{ width:clamp(24px, 5vw, 86px); height:7px; }
+    .mobile-layout canvas{ touch-action:none; }
+
+    .mobile-layout #game-container.controls-on #mobile{
+      position:static; display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:6px;
+    }
+    .mobile-layout .mPad{ gap:4px; padding:3px; border-radius:12px; }
+    .mobile-layout .mBtn{
+      flex:1; min-width:0; min-height:44px; padding:4px;
+      font-size:clamp(10px, 1.8vw, 14px); line-height:1.15; border-radius:9px;
+    }
+    .mobile-layout .overlay{
+      padding:var(--safe-top) var(--safe-right) var(--safe-bottom) var(--safe-left);
+    }
+    .mobile-layout .overlay .card{
+      max-height:100%; max-width:88%; overflow:auto;
+      padding:clamp(8px, 3vmin, 22px); border-radius:16px;
+    }
+    .mobile-layout .overlay h2{ font-size:clamp(20px, 7dvh, 34px); margin:0 0 6px; }
+    .mobile-layout .overlay p{ font-size:clamp(11px, 3dvh, 16px); margin:0 0 8px; }
+    .mobile-layout .overlay button{
+      min-height:44px; padding:5px 12px; font-size:clamp(11px, 3.5dvh, 18px); border-radius:12px;
+    }
+    .mobile-layout .mode-options{ gap:5px; }
+    .mobile-layout .keyboard-hint{ display:none; }
+    .mode-options{ display:grid; gap:12px; }
+    .keyboard-hint{ margin-top:18px !important; font-size:min(18px, 4vw) !important; opacity:.82; }
+
+    @media (orientation:landscape) and (max-height:500px){
+      .mobile-layout #splash-screen{
+        padding:max(14px, var(--safe-top)) max(26px, var(--safe-right))
+          max(14px, var(--safe-bottom)) max(26px, var(--safe-left));
+      }
+      .mobile-layout .splash-inner{ height:100%; aspect-ratio:auto; gap:8px; padding:10px; }
+      .mobile-layout .tape-bars{ height:clamp(10px, 6dvh, 32px); }
+      .mobile-layout .click-hint{ margin-top:2px; }
     }
 
   </style>
@@ -369,7 +381,9 @@
     </div>
   </div>
 
-  <div id="game-container">
+  <div id="game-container" hidden>
+
+    <button id="display-toggle" type="button" aria-label="Full screen" aria-pressed="false" title="Full screen" hidden>⛶</button>
 
     <div id="rotate-lock" aria-live="polite" aria-label="Rotate device to landscape">
       <div class="rotate-inner">
@@ -380,14 +394,11 @@
           </svg>
         </div>
         <div class="rotate-title">ROTATE DEVICE<br>TO LANDSCAPE</div>
-        <div class="rotate-sub">Mobile portrait mode is locked for Battle Cannons.<br>Landscape gives the intended combat view and controls.</div>
-        <div class="rotate-start">PRESS START AFTER ROTATION</div>
+        <div class="rotate-sub">Turn your device sideways to play.</div>
       </div>
     </div>
-    <canvas id="c"></canvas>
-
     <div id="hud">
-      <div class="hudBox" style="gap:12px;">
+      <div class="hudBox">
         <div>
           <div class="hudLabel">YOU</div>
           <div class="barWrap"><div id="hpYou" class="bar" style="width:100%"></div></div>
@@ -398,15 +409,16 @@
         </div>
       </div>
 
-      <div class="hudBox" style="gap: 15px;">
-        <span class="hudLabel">ANGLE</span><span class="hudVal mono" id="hudAngle">45°</span>
-        <span class="hudLabel">POWER</span><span class="hudVal mono" id="hudPower">85</span>
-        <span class="hudLabel">WIND</span><span class="hudVal mono" id="hudWind">+0.0</span>
-        <span class="hudLabel">WEAPON</span><span class="hudVal mono" id="hudWeapon">CLASSIC</span>
-        <span class="hudLabel">MODE</span><span class="hudVal mono" id="hudMode">CLASSIC</span>
-        <span class="hudLabel">TURN</span><span class="hudVal mono" id="hudTurn">YOU</span>
+      <div class="hudBox">
+        <span class="hudStat"><span class="hudLabel">ANGLE</span><span class="hudVal mono" id="hudAngle">45°</span></span>
+        <span class="hudStat"><span class="hudLabel">POWER</span><span class="hudVal mono" id="hudPower">85</span></span>
+        <span class="hudStat"><span class="hudLabel">WIND</span><span class="hudVal mono" id="hudWind">+0.0</span></span>
+        <span class="hudStat"><span class="hudLabel">WEAPON</span><span class="hudVal mono" id="hudWeapon">CLASSIC</span></span>
+        <span class="hudStat"><span class="hudLabel">MODE</span><span class="hudVal mono" id="hudMode">CLASSIC</span></span>
+        <span class="hudStat"><span class="hudLabel">TURN</span><span class="hudVal mono" id="hudTurn">YOU</span></span>
       </div>
     </div>
+    <canvas id="c"></canvas>
 
     <div id="mobile">
       <div class="mPad">
@@ -435,17 +447,22 @@
       <div class="card">
         <h2 id="modeTitle">Choose difficulty</h2>
         <p>Select combat complexity</p>
-        <div style="display:grid;gap:12px;">
+        <div class="mode-options">
           <button data-mode="classic" type="button">CLASSIC · 100 HP · NORMAL BLAST · WIND x1.0</button>
           <button data-mode="hardcore" type="button">HARDCORE · 150 HP · SMALLER BLAST · WIND x1.4</button>
           <button data-mode="nightmare" type="button">NIGHTMARE · 200 HP · TIGHT BLAST · WIND x1.8</button>
         </div>
-        <p style="margin-top:18px;font-size:min(18px,4vw);opacity:.82;">Q / weapon button = switch CLASSIC ↔ TRIPLE SHELLS</p>
+        <p class="keyboard-hint">Q / weapon button = switch CLASSIC ↔ TRIPLE SHELLS</p>
       </div>
     </div>
+    <dialog id="display-help" class="card" aria-labelledby="display-help-title">
+      <h2 id="display-help-title">Full screen</h2>
+      <p id="display-help-text"></p>
+      <form method="dialog"><button type="submit">OK</button></form>
+    </dialog>
   </div>
 
   <script src="./sfx.js"></script>
-  <script src="./game.js"></script>
+  <script src="./game.js?v=mobile-landscape-1"></script>
 </body>
 </html>
